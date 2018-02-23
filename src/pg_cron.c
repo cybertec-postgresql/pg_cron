@@ -78,7 +78,8 @@ typedef enum
 	CLOCK_JUMP_BACKWARD = 0,
 	CLOCK_PROGRESSED = 1,
 	CLOCK_JUMP_FORWARD = 2,
-	CLOCK_CHANGE = 3
+	CLOCK_CHANGE = 3,
+	CLOCK_NO_CHANGE = 4
 } ClockProgress;
 
 
@@ -95,6 +96,7 @@ static void StartPendingRuns(CronTask *task, ClockProgress clockProgress,
 static int MinutesPassed(TimestampTz startTime, TimestampTz stopTime);
 static TimestampTz TimestampMinuteStart(TimestampTz time);
 static TimestampTz TimestampMinuteEnd(TimestampTz time);
+static TimestampTz TimestampAddInterval(TimestampTz time, Interval *interval);
 static bool ShouldRunTask(entry *schedule, TimestampTz currentMinute,
 						  bool doWild, bool doNonWild);
 
@@ -343,11 +345,6 @@ StartAllPendingRuns(List *taskList, TimestampTz currentTime)
 	}
 
 	minutesPassed = MinutesPassed(lastMinute, currentTime);
-	if (minutesPassed == 0)
-	{
-		/* wait for new minute */
-		return;
-	}
 
 	/* use Vixie cron logic for clock jumps */
 	if (minutesPassed > (3*MINUTE_COUNT))
@@ -364,6 +361,11 @@ StartAllPendingRuns(List *taskList, TimestampTz currentTime)
 	{
 		/* clock went forward by 1-5 minutes */
 		clockProgress = CLOCK_PROGRESSED;
+	}
+	else if (minutesPassed == 0)
+	{
+		/* only periodic tasks need to be scheduled */
+		clockProgress = CLOCK_NO_CHANGE;
 	}
 	else if (minutesPassed > -(3*MINUTE_COUNT))
 	{
@@ -409,9 +411,21 @@ StartPendingRuns(CronTask *task, ClockProgress clockProgress,
 	TimestampTz virtualTime = lastMinute;
 	TimestampTz currentMinute = TimestampMinuteStart(currentTime);
 
+	if (schedule->flags & INTERVAL_RUN)
+	{
+		if (task->lastStart == 0 || TimestampAddInterval(task->lastStart, &schedule->run_period) < currentTime)
+			task->pendingRunCount = 1;
+
+		return;
+	}
 
 	switch (clockProgress)
 	{
+		case CLOCK_NO_CHANGE:
+		{
+			break;
+		}
+
 		case CLOCK_PROGRESSED:
 		{
 			/*
@@ -559,6 +573,13 @@ TimestampMinuteEnd(TimestampTz time)
 	return result;
 }
 
+static TimestampTz
+TimestampAddInterval(TimestampTz time, Interval *interval)
+{
+	return DatumGetTimestampTz(DirectFunctionCall2(timestamptz_pl_interval,
+					TimestampTzGetDatum(time),
+					IntervalPGetDatum(interval)));
+}
 
 /*
  * ShouldRunTask returns whether a job should run in the current
@@ -759,6 +780,7 @@ PollForTasks(List *taskList)
 	 * Find the first time-based event, which is either the start of a new
 	 * minute or a timeout.
 	 */
+	/* FIXME: or a periodic task */
 	TimestampDifference(currentTime, nextEventTime, &waitSeconds, &waitMicros);
 
 	pollTimeout = waitSeconds * 1000 + waitMicros / 1000;
@@ -905,6 +927,8 @@ ManageCronTask(CronTask *task, TimestampTz currentTime)
 				NULL
 			};
 			sprintf(nodePortString, "%d", cronJob->nodePort);
+
+			task->lastStart = currentTime;
 
 			Assert(sizeof(keywordArray) == sizeof(valueArray));
 
@@ -1231,7 +1255,7 @@ ManageCronTask(CronTask *task, TimestampTz currentTime)
 		case CRON_TASK_DONE:
 		default:
 		{
-			InitializeCronTask(task, jobId);
+			InitializeCronTask(task, jobId, false);
 		}
 
 	}

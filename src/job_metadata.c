@@ -65,10 +65,11 @@ static Oid CronJobRelationId(void);
 
 static CronJob * TupleToCronJob(TupleDesc tupleDescriptor, HeapTuple heapTuple);
 static bool PgCronHasBeenLoaded(void);
-
+static Datum cron_schedule_internal(char *schedule, char *command);
 
 /* SQL-callable functions */
 PG_FUNCTION_INFO_V1(cron_schedule);
+PG_FUNCTION_INFO_V1(cron_schedule_interval);
 PG_FUNCTION_INFO_V1(cron_unschedule);
 PG_FUNCTION_INFO_V1(cron_job_cache_invalidate);
 
@@ -163,6 +164,31 @@ cron_schedule(PG_FUNCTION_ARGS)
 
 	char *schedule = text_to_cstring(scheduleText);
 	char *command = text_to_cstring(commandText);
+
+	return cron_schedule_internal(schedule, command);
+}
+
+/*
+ * cluster_schedule_interval schedules a periodic cron job.
+ */
+Datum
+cron_schedule_interval(PG_FUNCTION_ARGS)
+{
+	Datum scheduleInterval = PG_GETARG_DATUM(0);
+	text *commandText = PG_GETARG_TEXT_P(1);
+
+	char schedule[MAX_COMMAND];
+	char *command = text_to_cstring(commandText);
+
+	snprintf(schedule, MAX_COMMAND, "@interval(%s)",
+			DatumGetCString(DirectFunctionCall1(interval_out, scheduleInterval)));
+
+	return cron_schedule_internal(schedule, command);
+}
+
+static Datum
+cron_schedule_internal(char *schedule, char *command)
+{
 	entry *parsedSchedule = NULL;
 
 	int64 jobId = 0;

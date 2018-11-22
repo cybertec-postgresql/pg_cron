@@ -1,3 +1,4 @@
+-- Check the update procedure
 CREATE EXTENSION pg_cron VERSION '1.0';
 SELECT extversion FROM pg_extension WHERE extname='pg_cron';
  extversion 
@@ -12,18 +13,84 @@ SELECT extversion FROM pg_extension WHERE extname='pg_cron';
  1.1
 (1 row)
 
--- Vacuum every day at 10:00am (GMT)
+ALTER EXTENSION pg_cron UPDATE TO '1.2';
+SELECT extversion FROM pg_extension WHERE extname='pg_cron';
+ extversion 
+------------
+ 1.2
+(1 row)
+
 SELECT cron.schedule('0 10 * * *', 'VACUUM');
  schedule 
 ----------
         1
 (1 row)
 
--- Stop scheduling a job
-SELECT cron.unschedule(1);
- unschedule 
-------------
- t
+SELECT cron.schedule('@daily', 'SELECT pg_sleep(1');
+ schedule 
+----------
+        2
 (1 row)
 
+SELECT cron.schedule('@interval(00:00:10)', 'SELECT pg_sleep(1');
+ schedule 
+----------
+        3
+(1 row)
+
+SELECT cron.schedule('00:00:22'::interval, 'SELECT pg_sleep(1');
+ schedule 
+----------
+        4
+(1 row)
+
+SELECT cron.schedule('8 hours'::interval, 'SELECT pg_sleep(1');
+ schedule 
+----------
+        5
+(1 row)
+
+SELECT cron.schedule('1 seconds'::interval, 'SELECT pg_sleep(1');
+ schedule 
+----------
+        6
+(1 row)
+
+SELECT cron.schedule('2 days'::interval, 'SELECT pg_sleep(1');
+ schedule 
+----------
+        7
+(1 row)
+
+SELECT cron.schedule('@interval(02 00:30:00)', 'SELECT pg_sleep(1');
+ schedule 
+----------
+        8
+(1 row)
+
+SELECT cron.schedule('2 days 12 minutes'::interval, 'SELECT pg_sleep(1');
+ schedule 
+----------
+        9
+(1 row)
+
+SELECT cron.schedule('00:07:00'::interval, 'SELECT pg_sleep(1');
+ schedule 
+----------
+       10
+(1 row)
+
+SELECT cron.schedule('01:00:00'::interval, 'SELECT pg_sleep(1');
+ schedule 
+----------
+       11
+(1 row)
+
+-- Stop scheduling a job
+DO $$
+BEGIN
+    FOR i IN 1..11 LOOP
+        PERFORM cron.unschedule(i);
+    END LOOP;
+END$$;
 DROP EXTENSION pg_cron;

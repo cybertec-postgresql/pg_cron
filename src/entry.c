@@ -29,6 +29,9 @@
 #include "string.h"
 #include "cron.h"
 
+#include "datatype/timestamp.h"
+#include "fmgr.h"
+#include "utils/fmgrprotos.h"
 
 typedef	enum ecode {
 	e_none, e_minute, e_hour, e_dom, e_month, e_dow,
@@ -119,7 +122,8 @@ parse_cron_entry(char *schedule)
 		 * anymore.  too much for my overloaded brain. (vix, jan90)
 		 * HINT
 		 */
-		ch = get_string(cmd, MAX_COMMAND, file, " \t\n");
+		ch = get_string(cmd, MAX_COMMAND, file, "\t\n");
+
 		if (!strcmp("reboot", cmd)) {
 			e->flags |= WHEN_REBOOT;
 		} else if (!strcmp("yearly", cmd) || !strcmp("annually", cmd)){
@@ -156,6 +160,29 @@ parse_cron_entry(char *schedule)
 			bit_nset(e->month, 0, (LAST_MONTH-FIRST_MONTH+1));
 			bit_nset(e->dow, 0, (LAST_DOW-FIRST_DOW+1));
 			e->flags |= HR_STAR;
+		} else if (!strncmp("interval(", cmd, strlen("interval("))
+					&& cmd[strlen(cmd)-1] == ')') {
+			char interval_spec[MAX_COMMAND];
+			size_t interval_len = strlen(cmd) - strlen("interval(") - 1;
+			Interval *period;
+
+			memcpy(interval_spec, cmd + strlen("interval("), interval_len);
+			interval_spec[interval_len] = '\0';
+			period = (Interval*) DatumGetPointer(DirectFunctionCall3(interval_in,
+											CStringGetDatum(interval_spec),
+											ObjectIdGetDatum(InvalidOid),
+											Int32GetDatum(-1)));
+
+			if (period->time < 0 || period->day < 0 || period->month < 0)
+				ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+								errmsg("schedule is not allowed to contain negative values")));
+
+			if (period->time == 0 && period->day == 0 && period->month == 0)
+				ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+								errmsg("schedule must be non-zero")));
+
+			e->run_period = *period;
+			e->flags |= INTERVAL_RUN;
 		} else {
 			ecode = e_timespec;
 			goto eof;

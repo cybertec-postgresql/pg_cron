@@ -38,6 +38,7 @@ typedef struct CronTask
 	PGconn *connection;
 	PostgresPollingStatusType pollingStatus;
 	TimestampTz startDeadline;
+	TimestampTz lastStart;
 	bool isSocketReady;
 	bool isActive;
 	char *errorMessage;
@@ -48,7 +49,7 @@ typedef struct CronTask
 extern void InitializeTaskStateHash(void);
 extern void RefreshTaskHash(void);
 extern List * CurrentTaskList(void);
-extern void InitializeCronTask(CronTask *task, int64 jobId);
+extern void InitializeCronTask(CronTask *task, int64 jobId, bool isnew);
 extern void RemoveTask(int64 jobId);
 
 

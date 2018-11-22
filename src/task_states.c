@@ -120,7 +120,7 @@ GetCronTask(int64 jobId)
 	task = hash_search(CronTaskHash, &hashKey, HASH_ENTER, &isPresent);
 	if (!isPresent)
 	{
-		InitializeCronTask(task, jobId);
+		InitializeCronTask(task, jobId, true);
 	}
 
 	return task;
@@ -131,7 +131,7 @@ GetCronTask(int64 jobId)
  * InitializeCronTask intializes a CronTask struct.
  */
 void
-InitializeCronTask(CronTask *task, int64 jobId)
+InitializeCronTask(CronTask *task, int64 jobId, bool isnew)
 {
 	task->runId = 0;
 	task->jobId = jobId;
@@ -140,6 +140,10 @@ InitializeCronTask(CronTask *task, int64 jobId)
 	task->connection = NULL;
 	task->pollingStatus = 0;
 	task->startDeadline = 0;
+	if (isnew)
+	{
+		task->lastStart = 0;
+	}
 	task->isSocketReady = false;
 	task->isActive = true;
 	task->errorMessage = NULL;

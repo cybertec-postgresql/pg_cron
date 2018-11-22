@@ -39,6 +39,9 @@
 # include <time.h>
 #endif
 
+#include "c.h"
+#include "datatype/timestamp.h"
+
 	/* these are really immutable, and are
 	 *   defined for symbolic convenience only
 	 * TRUE, FALSE, and ERR must be distinct
@@ -171,6 +174,8 @@ typedef	struct _entry {
 #define	WHEN_REBOOT	0x04
 #define MIN_STAR	0x08
 #define HR_STAR		0x10
+#define INTERVAL_RUN 0x20
+	Interval    run_period;
 } entry;
 
 			/* the crontab database will be a list of the
